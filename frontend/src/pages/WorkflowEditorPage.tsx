@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import axios from 'axios';
 import {
   ReactFlow, type Node, type Edge, addEdge, type Connection,
   useNodesState, useEdgesState, Controls, Background, MiniMap,
@@ -17,7 +18,7 @@ import { Label } from '../components/ui/Label';
 import {
   Save, ArrowLeft, Plus, Play, Lock, History,
   ChevronRight, X, RefreshCw, Zap,
-  Globe, Clock, GitBranch, Code, Bell,
+  Globe, Clock, GitBranch, Code, Bell, Sparkles,
 } from 'lucide-react';
 
 // ── Node type config ──────────────────────────────────────────────────────────
@@ -78,7 +79,9 @@ export default function WorkflowEditorPage() {
   const [description, setDescription] = useState('');
   const [isSaving, setIsSaving]   = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [sidePanel, setSidePanel] = useState<'nodes' | 'runs' | 'settings'>('nodes');
+  const [sidePanel, setSidePanel] = useState<'nodes' | 'runs' | 'settings' | 'ai'>('nodes');
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
   const [runs, setRuns]           = useState<WorkflowRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
   const [runDetails, setRunDetails] = useState<WorkflowRun | null>(null);
@@ -185,17 +188,133 @@ export default function WorkflowEditorPage() {
     }
   };
 
-  const pollRunStatus = async (runId: string) => {
-    try {
-      const run = await runsApi.get(runId);
-      setRunDetails(run);
-      if (run.status === 'running') {
-        window.setTimeout(() => pollRunStatus(runId), 1500);
+  // ── WebSockets Real-Time Monitoring ──────────────────────────────────────────
+  useEffect(() => {
+    if (isNew || !id) return;
+
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: number;
+
+    const connectWebSocket = async () => {
+      try {
+        const authRaw = localStorage.getItem('auth-storage');
+        let token = '';
+        let tenantId = '';
+        if (authRaw) {
+          const auth = JSON.parse(authRaw);
+          token = auth?.state?.token || '';
+          tenantId = auth?.state?.user?.tenant_id || '';
+        }
+
+        const res = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/config/reverb`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Tenant-ID': tenantId,
+          }
+        });
+        const { key, host, port } = res.data;
+
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(`${protocol}://${host}:${port}/app/${key}?protocol=7&client=js&version=4.4.0`);
+
+        ws.onopen = () => {
+          console.log('WebSocket Connected to Reverb');
+          ws?.send(JSON.stringify({
+            event: 'pusher:subscribe',
+            data: { channel: `workflows.${id}` }
+          }));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const parsed = JSON.parse(event.data);
+            if (parsed.event && parsed.data) {
+              const eventData = JSON.parse(parsed.data);
+              
+              if (parsed.event === 'step.started' || parsed.event === 'step.completed' || parsed.event === 'step.failed') {
+                setRunDetails(prev => {
+                  if (!prev || prev.id !== eventData.workflow_run_id) return prev;
+                  const stepRuns = [...(prev.step_runs ?? [])];
+                  const idx = stepRuns.findIndex(s => s.id === eventData.id);
+                  if (idx !== -1) {
+                    stepRuns[idx] = { ...stepRuns[idx], ...eventData };
+                  } else {
+                    stepRuns.push(eventData);
+                  }
+                  return { ...prev, step_runs: stepRuns };
+                });
+                loadRuns();
+              } else if (parsed.event === 'workflow.started' || parsed.event === 'workflow.completed' || parsed.event === 'workflow.failed') {
+                setRunDetails(prev => {
+                  if (!prev || prev.id !== eventData.id) return prev;
+                  return { ...prev, ...eventData };
+                });
+                loadRuns();
+              }
+            }
+          } catch (e) {
+            console.error('Error handling WebSocket message:', e);
+          }
+        };
+
+        ws.onclose = () => {
+          console.log('WebSocket Connection Closed. Reconnecting...');
+          reconnectTimeout = window.setTimeout(connectWebSocket, 3000);
+        };
+
+        ws.onerror = (err) => {
+          console.error('WebSocket Error:', err);
+        };
+      } catch (err) {
+        console.error('Failed to initialize WebSocket:', err);
+        reconnectTimeout = window.setTimeout(connectWebSocket, 5000);
       }
-    } catch (err) {
-      console.error('Failed to poll run status', err);
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (ws) ws.close();
+      clearTimeout(reconnectTimeout);
+    };
+  }, [id, isNew]);
+
+  // ── Canvas Node Styling based on step run status ──────────────────────────────
+  useEffect(() => {
+    if (runDetails && runDetails.step_runs) {
+      setNodes(nds => nds.map(n => {
+        const step = runDetails.step_runs?.find((s: any) => s.node_id === n.id);
+        if (step) {
+          let styleAttrs: Record<string, string> = {
+            border: '2px solid transparent',
+          };
+          if (step.status === 'completed') {
+            styleAttrs = { border: '2px solid #22c55e', backgroundColor: '#f0fdf4', color: '#14532d', boxShadow: '0 0 10px rgba(34,197,94,0.3)' };
+          } else if (step.status === 'failed') {
+            styleAttrs = { border: '2px solid #ef4444', backgroundColor: '#fef2f2', color: '#7f1d1d', boxShadow: '0 0 10px rgba(239,68,68,0.3)' };
+          } else if (step.status === 'running') {
+            styleAttrs = { border: '2px solid #3b82f6', backgroundColor: '#eff6ff', color: '#1e3a8a', boxShadow: '0 0 10px rgba(59,130,246,0.5)' };
+          } else if (step.status === 'timeout') {
+            styleAttrs = { border: '2px solid #f59e0b', backgroundColor: '#fffbeb', color: '#78350f', boxShadow: '0 0 10px rgba(245,158,11,0.3)' };
+          } else if (step.status === 'skipped') {
+            styleAttrs = { border: '2px solid #d1d5db', backgroundColor: '#f3f4f6', color: '#9ca3af', opacity: '0.6' };
+          }
+
+          return {
+            ...n,
+            style: { ...n.style, ...styleAttrs }
+          };
+        }
+        return n;
+      }));
+    } else {
+      // Reset styles if no run is active/selected
+      setNodes(nds => nds.map(n => ({
+        ...n,
+        style: undefined
+      })));
     }
-  };
+  }, [runDetails, setNodes]);
 
   useEffect(() => {
     if (sidePanel === 'runs') loadRuns();
@@ -339,7 +458,6 @@ export default function WorkflowEditorPage() {
           setTimeout(loadRuns, 800);
           if (result?.workflow_run_id) {
             loadRunDetails(result.workflow_run_id);
-            pollRunStatus(result.workflow_run_id);
           }
         } catch (err: unknown) {
           const e = err as { response?: { data?: { message?: string } } };
@@ -353,6 +471,92 @@ export default function WorkflowEditorPage() {
           setIsRunning(false);
         }
       },
+    });
+  };
+
+  // ── AI Workflow Generation ──────────────────────────────────────────────────
+  const handleAIGenerate = async () => {
+    if (!aiPrompt.trim()) return;
+
+    confirm({
+      title: 'Generate workflow with AI',
+      message: 'Generating with AI will overwrite the current nodes and edges on the canvas. Do you want to proceed?',
+      type: 'warning',
+      icon: 'warning',
+      confirmLabel: 'Proceed',
+      onConfirm: async () => {
+        setIsGenerating(true);
+        try {
+          const authRaw = localStorage.getItem('auth-storage');
+          let token = '';
+          let tenantId = '';
+          if (authRaw) {
+            const auth = JSON.parse(authRaw);
+            token = auth?.state?.token || '';
+            tenantId = auth?.state?.user?.tenant_id || '';
+          }
+
+          const response = await axios.post(
+            `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/workflows/ai/generate`,
+            { prompt: aiPrompt },
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'X-Tenant-ID': tenantId,
+              }
+            }
+          );
+
+          if (response.data?.success && response.data?.definition) {
+            const definition = response.data.definition;
+            
+            // Map definition to React Flow nodes and edges
+            const validNodeTypes = ['http', 'delay', 'condition', 'script', 'notification'] as const;
+            
+            const generatedNodes = (definition.nodes ?? []).map((node: any, i: number) => {
+              const nodeType = node.type;
+              const validType = validNodeTypes.includes(nodeType) ? nodeType : 'http';
+              return {
+                id: node.id,
+                type: 'default',
+                position: node.position || { x: 150 + (i % 3) * 250, y: 100 + Math.floor(i / 3) * 150 },
+                data: {
+                  label: buildNodeLabel(validType, i),
+                  nodeType: validType,
+                  config: node.data ?? {},
+                },
+              };
+            });
+
+            const generatedEdges = (definition.edges ?? []).map((edge: any) => ({
+              id: edge.id || `edge-${edge.source}-${edge.target}`,
+              source: edge.source,
+              target: edge.target,
+              type: 'smoothstep',
+              animated: true,
+            }));
+
+            setNodes(generatedNodes);
+            setEdges(generatedEdges);
+            success('AI Workflow generated successfully!');
+            setSidePanel('nodes');
+          }
+        } catch (err: any) {
+          console.error('AI Generation failed', err);
+          const apiError = err.response?.data?.message || err.response?.data?.error || err.message;
+          confirm({
+            title: 'Generation failed',
+            message: `Error: ${apiError}`,
+            type: 'danger',
+            icon: 'warning',
+            confirmLabel: 'OK',
+            cancelLabel: '',
+            onConfirm: () => {},
+          });
+        } finally {
+          setIsGenerating(false);
+        }
+      }
     });
   };
 
@@ -431,6 +635,7 @@ export default function WorkflowEditorPage() {
       <div className="flex border-b border-gray-100">
         {[
           { key: 'nodes',    label: 'Nodes',    icon: Zap },
+          { key: 'ai',       label: 'AI Builder', icon: Sparkles },
           { key: 'runs',     label: 'Runs',     icon: History },
           { key: 'settings', label: 'Settings', icon: ChevronRight },
         ].map(tab => {
@@ -475,10 +680,58 @@ export default function WorkflowEditorPage() {
                     <p className="font-semibold">{n.label}</p>
                     <p className="opacity-60">{n.desc}</p>
                   </div>
-                  {canEdit && <Plus className="w-3 h-3 ml-auto opacity-40 flex-shrink-0 mt-0.5" />}
+                  {canEdit && <Plus className="w-3.5 h-3.5 ml-auto opacity-40 flex-shrink-0 mt-0.5" />}
                 </button>
               );
             })}
+          </div>
+        )}
+        {sidePanel === 'ai' && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">AI Workflow Builder</p>
+            </div>
+            
+            <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100 text-xs text-indigo-800 space-y-1.5">
+              <p className="font-semibold">Describe the workflow in natural language</p>
+              <p className="opacity-90">Specify steps like HTTP calls, delay nodes, checking conditions, or sending notifications. AI will automatically generate and connect the DAG.</p>
+              <span className="inline-block bg-white text-indigo-600 font-medium px-2 py-0.5 rounded border border-indigo-200 text-[10px]">
+                Supports English & Indonesian
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs text-gray-500 font-medium mb-1 block">Prompt</Label>
+                <textarea
+                  value={aiPrompt}
+                  onChange={e => setAiPrompt(e.target.value)}
+                  placeholder="Example: Send POST request to pay api, wait 5 seconds, check if status is 200, if true send notification."
+                  disabled={isGenerating || !canEdit}
+                  rows={6}
+                  className="w-full text-xs rounded-md border border-input bg-background px-2.5 py-2 shadow-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none text-gray-800 placeholder-gray-400 disabled:bg-gray-50"
+                />
+              </div>
+
+              <Button
+                onClick={handleAIGenerate}
+                disabled={isGenerating || !aiPrompt.trim() || !canEdit}
+                className="w-full text-xs py-2 flex items-center justify-center gap-1.5"
+              >
+                {isGenerating ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Generate Workflow
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         )}
         {sidePanel === 'runs' && (

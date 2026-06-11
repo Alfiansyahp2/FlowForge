@@ -53,6 +53,9 @@ class WebhookController extends Controller
             'description' => ['nullable', 'string', 'max:5000'],
         ]);
 
+        // Verify workflow exists and belongs to tenant (scopes automatically via TenantScope)
+        Workflow::findOrFail($request->input('workflow_id'));
+
         // Generate unique webhook token
         $token = $this->generateUniqueToken();
 

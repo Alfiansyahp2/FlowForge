@@ -32,24 +32,14 @@ class RetryStepJob implements ShouldQueue
     public function handle(): void
     {
         $workflowRun = $this->stepRun->workflowRun;
-        $workflowVersion = $workflowRun->version;
-        $definition = $workflowVersion->definition;
 
-        // Rebuild executor using the container for dependencies
-        $executor = App::make(WorkflowExecutor::class);
-
-        // Find the node definition in the workflow graph
-        $node = collect($definition['nodes'] ?? [])->firstWhere('id', $this->stepRun->node_id);
-
-        if (!$node) {
-            Log::error('RetryStepJob failed: node not found', [
-                'node_id' => $this->stepRun->node_id,
-                'workflow_run_id' => $this->stepRun->workflow_run_id,
-            ]);
+        if ($workflowRun->status !== 'running') {
+            Log::info("RetryStepJob skipped: workflow run {$workflowRun->id} is in status {$workflowRun->status}");
             return;
         }
 
-        // Re-run the whole workflow from the failed step context is not supported yet.
-        Log::warning('RetryStepJob is currently a placeholder and does not re-execute the failed step automatically.');
+        Log::info("RetryStepJob: triggering retry for step {$this->stepRun->node_id} on workflow run {$workflowRun->id}");
+        
+        ExecuteStepJob::dispatch($this->stepRun);
     }
 }

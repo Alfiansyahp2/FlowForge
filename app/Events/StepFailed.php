@@ -26,8 +26,7 @@ class StepFailed implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new \Illuminate\Broadcasting\PresenceChannel('workflows.' . $this->stepRun->workflowRun->workflow_id),
-            new \Illuminate\Broadcasting\PrivateChannel('tenant.' . $this->stepRun->workflowRun->workflow->tenant_id),
+            new \Illuminate\Broadcasting\Channel('workflows.' . $this->stepRun->workflowRun->workflow_id),
         ];
     }
 

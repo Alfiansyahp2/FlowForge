@@ -38,12 +38,12 @@ class WorkflowExecutor
         WorkflowValidator $validator,
         TopologicalSorter $sorter,
         RetryManager $retryManager,
-        SafeExpressionEvaluator $expressionEvaluator
+        ?SafeExpressionEvaluator $expressionEvaluator = null
     ) {
         $this->validator = $validator;
         $this->sorter = $sorter;
         $this->retryManager = $retryManager;
-        $this->expressionEvaluator = $expressionEvaluator;
+        $this->expressionEvaluator = $expressionEvaluator ?? app(SafeExpressionEvaluator::class);
     }
 
     /**
@@ -63,86 +63,67 @@ class WorkflowExecutor
         ?string $triggeredBy = null
     ): WorkflowRun
     {
-        // WorkflowVersion.definition is cast to array, so use it directly.
         $definition = $version->definition;
 
         // Validate workflow
         $this->validator->validateOrFail($definition);
 
-        // Get execution order
-        $executionBatches = $this->sorter->getExecutionBatches($definition);
+        $now = now();
+        $timeoutSeconds = $version->workflow->settings['timeout_seconds'] ?? 1800; // default 30 mins
 
-        return DB::transaction(function () use ($version, $input, $executionBatches, $definition, $triggerType, $triggeredBy) {
-            $now = now();
+        // Create workflow run
+        $workflowRun = WorkflowRun::create([
+            'tenant_id'           => $version->workflow->tenant_id,
+            'workflow_id'         => $version->workflow->id,
+            'workflow_version_id' => $version->id,
+            'trigger_type'        => $triggerType,
+            'triggered_by'        => $triggeredBy,
+            'status'              => 'running',
+            'input'               => $input,
+            'started_at'          => $now,
+            'timeout_seconds'     => $timeoutSeconds,
+            'timeout_at'          => $now->copy()->addSeconds($timeoutSeconds),
+        ]);
 
-            // Create workflow run
-            $workflowRun = WorkflowRun::create([
-                'tenant_id'           => $version->workflow->tenant_id,
-                'workflow_id'         => $version->workflow->id,
-                'workflow_version_id' => $version->id,
-                'trigger_type'        => $triggerType,
-                'triggered_by'        => $triggeredBy,
-                'status'              => 'running',
-                'input'               => $input,
-                'started_at'          => $now,
-            ]);
+        // Broadcast workflow started event
+        broadcast(new WorkflowStarted($workflowRun));
 
-            // Broadcast workflow started event
-            broadcast(new WorkflowStarted($workflowRun));
+        // Start execution of Batch 0
+        $this->startBatch($workflowRun, 0);
 
-            // Execute all batches
-            $executionContext = [
-                'workflow_run_id' => $workflowRun->id,
-                'input' => $input,
-                'variables' => [],
-                'now' => $now,
-            ];
-
-            try {
-                foreach ($executionBatches as $batchIndex => $batch) {
-                    $this->executeBatch($batch, $definition, $executionContext, $batchIndex);
-                }
-
-                // Update workflow run status
-                $finishedAt = now();
-                $workflowRun->update([
-                    'status'      => 'completed',
-                    'finished_at' => $finishedAt,
-                    'duration'    => (int) $workflowRun->started_at->diffInMilliseconds($finishedAt),
-                ]);
-
-                // Broadcast workflow completed event
-                broadcast(new WorkflowCompleted($workflowRun));
-
-                return $workflowRun->fresh('stepRuns');
-            } catch (Exception $e) {
-                // Update workflow run as failed
-                $workflowRun->update([
-                    'status' => 'failed',
-                    'finished_at' => now(),
-                ]);
-
-                // Broadcast workflow failed event
-                broadcast(new WorkflowFailed($workflowRun, $e->getMessage()));
-
-                throw $e;
-            }
-        });
+        return $workflowRun;
     }
 
     /**
-     * Execute a batch of nodes (can run in parallel).
-     *
-     * @param array  $batch    Batch descriptor from TopologicalSorter
-     * @param array  $definition
-     * @param array  &$context
-     * @param int    $batchIndex  Used to set sort_order on StepRun
-     * @return void
-     * @throws Exception
+     * Start execution of a batch.
      */
-    private function executeBatch(array $batch, array $definition, array &$context, int $batchIndex = 0): void
+    public function startBatch(WorkflowRun $workflowRun, int $batchIndex): void
     {
-        $nodeResults = [];
+        $workflowRun->refresh();
+
+        if ($workflowRun->status !== 'running') {
+            return;
+        }
+
+        $definition = $workflowRun->version->definition;
+        $executionBatches = $this->sorter->getExecutionBatches($definition);
+
+        // If no more batches, complete the workflow run
+        if ($batchIndex >= count($executionBatches)) {
+            $finishedAt = now();
+            $duration = max(0, $finishedAt->diffInMilliseconds($workflowRun->started_at));
+
+            $workflowRun->update([
+                'status' => 'completed',
+                'finished_at' => $finishedAt,
+                'duration' => $duration,
+            ]);
+
+            broadcast(new WorkflowCompleted($workflowRun));
+            return;
+        }
+
+        $batch = $executionBatches[$batchIndex];
 
         foreach ($batch['nodes'] as $nodePosition => $nodeId) {
             $node = $this->findNode($definition, $nodeId);
@@ -154,38 +135,60 @@ class WorkflowExecutor
             $sortOrder = ($batchIndex * 100) + $nodePosition;
 
             $stepRun = $this->createStepRun(
-                $context['workflow_run_id'],
+                $workflowRun->id,
                 $nodeId,
                 $node,
                 $sortOrder,
-                $context['input'] ?? []
+                $workflowRun->input ?? []
             );
 
-            $stepStartedAt = now();
-            $stepRun->update(['status' => 'running', 'started_at' => $stepStartedAt]);
-
-            broadcast(new StepStarted($stepRun));
-
-            try {
-                $result = $this->executeNode($node, $context);
-
-                $stepFinishedAt = now();
-                $stepRun->update([
-                    'status'      => 'completed',
-                    'finished_at' => $stepFinishedAt,
-                    'duration'    => (int) $stepStartedAt->diffInMilliseconds($stepFinishedAt),
-                    'output'      => $result,
-                ]);
-
-                broadcast(new StepCompleted($stepRun));
-                $nodeResults[$nodeId] = $result;
-            } catch (Exception $e) {
-                $this->handleStepFailure($stepRun, $e, $node);
-                throw $e;
-            }
+            // Dispatch as background job
+            \App\Jobs\ExecuteStepJob::dispatch($stepRun);
         }
+    }
 
-        $context['variables'] = array_merge($context['variables'], $nodeResults);
+    /**
+     * Check if current batch is completed and proceed to next one safely.
+     */
+    public function checkAndProceedToNextBatch(WorkflowRun $workflowRun, int $currentSortOrder): void
+    {
+        $batchIndex = (int) floor($currentSortOrder / 100);
+
+        DB::transaction(function () use ($workflowRun, $batchIndex) {
+            // Lock workflow run to prevent race conditions
+            $run = WorkflowRun::where('id', $workflowRun->id)->lockForUpdate()->first();
+
+            if ($run->status !== 'running') {
+                return;
+            }
+
+            $definition = $run->version->definition;
+            $executionBatches = $this->sorter->getExecutionBatches($definition);
+
+            if (!isset($executionBatches[$batchIndex])) {
+                return;
+            }
+
+            $batch = $executionBatches[$batchIndex];
+
+            // Check if all steps in current batch are completed
+            $unfinished = StepRun::where('workflow_run_id', $run->id)
+                ->whereBetween('sort_order', [$batchIndex * 100, $batchIndex * 100 + 99])
+                ->where('status', '!=', 'completed')
+                ->exists();
+
+            if (!$unfinished) {
+                // Check if next batch was already started
+                $nextBatchIndex = $batchIndex + 1;
+                $nextBatchStarted = StepRun::where('workflow_run_id', $run->id)
+                    ->whereBetween('sort_order', [$nextBatchIndex * 100, $nextBatchIndex * 100 + 99])
+                    ->exists();
+
+                if (!$nextBatchStarted) {
+                    $this->startBatch($run, $nextBatchIndex);
+                }
+            }
+        });
     }
 
     /**
@@ -196,7 +199,7 @@ class WorkflowExecutor
      * @return array
      * @throws Exception
      */
-    private function executeNode(array $node, array &$context): array
+    public function executeNode(array $node, array &$context): array
     {
         $nodeType = $node['type'];
         $handler = self::NODE_HANDLERS[$nodeType] ?? null;
@@ -335,13 +338,13 @@ class WorkflowExecutor
      * @param array $node
      * @return void
      */
-    private function handleStepFailure(StepRun $stepRun, Exception $exception, array $node): void
+    public function handleStepFailure(StepRun $stepRun, Exception $exception, array $node): void
     {
         $maxRetries = $node['data']['max_retries'] ?? 3;
         $retryDelay = $node['data']['retry_delay'] ?? 5;
 
         $finishedAt = now();
-        $duration = max(0, $finishedAt->diffInMilliseconds($stepRun->started_at));
+        $duration = max(0, $finishedAt->diffInMilliseconds($stepRun->started_at ?? now()));
 
         $stepRun->update([
             'status' => 'failed',
@@ -368,6 +371,17 @@ class WorkflowExecutor
                 'retry_count' => $stepRun->retry_count,
                 'next_retry_at' => $stepRun->next_retry_at,
             ]);
+        } else {
+            // No retries left: Mark the entire workflow run as failed
+            $workflowRun = $stepRun->workflowRun;
+            $workflowRun->update([
+                'status' => 'failed',
+                'finished_at' => now(),
+                'error_message' => "Step {$stepRun->node_id} failed: " . $exception->getMessage(),
+                'duration' => (int) $workflowRun->started_at->diffInMilliseconds(now()),
+            ]);
+
+            broadcast(new WorkflowFailed($workflowRun, $exception->getMessage()));
         }
     }
 

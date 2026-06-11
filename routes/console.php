@@ -9,3 +9,6 @@ Artisan::command('inspire', function () {
 
 // Schedule the due schedules runner to run every minute
 Schedule::command('schedules:run-due')->everyMinute()->description('Run due workflow schedules');
+
+// Schedule the timeout checker to run every minute
+Schedule::command('workflows:check-timeouts')->everyMinute()->description('Check and mark timed-out workflow runs');

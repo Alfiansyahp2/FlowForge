@@ -13,9 +13,14 @@ class TenantScope implements Scope
      */
     public function apply(Builder $query, Model $model): void
     {
-        // Only apply if we have a current tenant and model has tenant_id column
-        if (function_exists('tenant') && hasTenant() && $model->getKeyName() !== 'id') {
+        // Only apply if we have a current tenant
+        if (function_exists('tenant') && hasTenant()) {
             $table = $model->getTable();
+
+            // Skip tenants table itself
+            if ($table === 'tenants') {
+                return;
+            }
 
             // Check if table has tenant_id column
             if ($this->tableHasColumn($table, 'tenant_id')) {
