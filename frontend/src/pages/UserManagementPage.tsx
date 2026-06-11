@@ -47,8 +47,11 @@ function RoleManageModal({ initial, onSave, onClose }: RoleManageProps) {
   ] as const;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md relative z-10">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
@@ -207,8 +210,11 @@ function UserFormModal({ initial, onSave, onClose }: UserFormProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md relative z-10">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900">
             {isEdit ? 'Edit User' : 'Create New User'}
@@ -360,6 +366,7 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     loadUsers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, roleFilter]);
 
   const loadUsers = async (page = 1) => {
@@ -371,10 +378,16 @@ export default function UserManagementPage() {
         page,
         per_page: 15,
       });
-      setUsers(res.data);
-      setMeta(res.meta);
+
+      // Debug logging
+      console.log('API Response:', res);
+
+      setUsers(res.data || []);
+      setMeta(res.meta || { current_page: 1, last_page: 1, total: 0, per_page: 15 });
     } catch (err) {
       console.error('Failed to load users', err);
+      setUsers([]);
+      setMeta({ current_page: 1, last_page: 1, total: 0, per_page: 15 });
     } finally {
       setIsLoading(false);
     }
@@ -485,7 +498,7 @@ export default function UserManagementPage() {
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Users',   value: meta.total, color: 'text-gray-800' },
+          // { label: 'Total Users',   value: meta.total, color: 'text-gray-800' },
           { label: 'Admins',   value: users.filter((u) => u.role === 'admin').length,  color: 'text-purple-700' },
           { label: 'Editors',  value: users.filter((u) => u.role === 'editor').length, color: 'text-blue-700' },
           { label: 'Viewers',  value: users.filter((u) => u.role === 'viewer').length, color: 'text-gray-600' },
@@ -574,9 +587,9 @@ export default function UserManagementPage() {
 
                     {/* Joined */}
                     <td className="px-4 py-3 text-xs text-gray-400">
-                      {new Date(user.created_at).toLocaleDateString('id-ID', {
+                      {user.created_at ? new Date(user.created_at).toLocaleDateString('id-ID', {
                         day: '2-digit', month: 'short', year: 'numeric',
-                      })}
+                      }) : '-'}
                     </td>
 
                     {/* Actions */}
