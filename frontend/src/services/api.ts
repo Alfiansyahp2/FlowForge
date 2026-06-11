@@ -8,7 +8,6 @@ import type {
   WorkflowRun,
   Webhook,
   Schedule,
-  ApiError,
   WorkflowStartResponse
 } from '../types';
 
@@ -51,6 +50,42 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Response interceptor to handle Laravel Resource formats
+api.interceptors.response.use(
+  (response) => {
+    // Handle Laravel Resource Collection format for list endpoints
+    if (response.data && typeof response.data === 'object') {
+      // Laravel Resources return { data: [], meta: {}, links: {} }
+      if ('data' in response.data && ('meta' in response.data || 'links' in response.data)) {
+        // Transform to frontend-expected pagination format
+        const laravelData = response.data;
+        return {
+          ...response,
+          data: {
+            data: laravelData.data || [],
+            current_page: laravelData.meta?.current_page || 1,
+            per_page: laravelData.meta?.per_page || (laravelData.meta?.per_page ?? 15),
+            total: laravelData.meta?.total || 0,
+            last_page: laravelData.meta?.last_page || 1,
+          },
+        };
+      }
+      // Handle single Laravel Resource format { data: {} }
+      else if ('data' in response.data && !('meta' in response.data)) {
+        return {
+          ...response,
+          data: response.data.data,
+        };
+      }
+    }
+    return response;
+  },
+  (error) => {
+    console.error('API Error:', error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
 // Auth API
 export const authApi = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
@@ -77,22 +112,22 @@ export const authApi = {
 export const workflowApi = {
   list: async (params?: { page?: number; per_page?: number }) => {
     const response = await api.get('/workflows', { params });
-    return response.data;
+    return response.data; // Now normalized by interceptor
   },
 
   get: async (id: string): Promise<Workflow> => {
     const response = await api.get(`/workflows/${id}`);
-    return response.data;
+    return response.data; // Now normalized by interceptor
   },
 
   create: async (data: Partial<Workflow>): Promise<Workflow> => {
     const response = await api.post<Workflow>('/workflows', data);
-    return response.data;
+    return response.data; // Now normalized by interceptor
   },
 
   update: async (id: string, data: Partial<Workflow>): Promise<Workflow> => {
     const response = await api.put<Workflow>(`/workflows/${id}`, data);
-    return response.data;
+    return response.data; // Now normalized by interceptor
   },
 
   delete: async (id: string) => {
@@ -134,14 +169,25 @@ export const workflowApi = {
 
 // Workflow Runs API
 export const runsApi = {
-  list: async (params?: { workflow_id?: string; page?: number }) => {
+  list: async (params?: {
+    status?: string;
+    workflow_id?: string;
+    date_from?: string;
+    date_to?: string;
+    page?: number;
+    per_page?: number;
+  }) => {
     const response = await api.get('/runs', { params });
-    return response.data?.data ?? response.data;
+    return response.data;
   },
 
-  get: async (id: string): Promise<WorkflowRun> => {
-    const response = await api.get(`/runs/${id}`);
-    return response.data?.data ?? response.data;
+  get: async (id: string) => {
+    const response = await api.get<{ data: WorkflowRun }>(`/runs/${id}`);
+    return response.data.data || response.data;
+  },
+
+  cancel: async (id: string) => {
+    await api.post(`/runs/${id}/cancel`);
   },
 };
 
@@ -152,33 +198,33 @@ export const webhookApi = {
     return response.data;
   },
 
-  get: async (id: string): Promise<Webhook> => {
+  get: async (id: string) => {
     const response = await api.get(`/webhooks/${id}`);
-    return response.data;
+    return response.data as Webhook;
   },
 
-  create: async (data: Partial<Webhook>): Promise<Webhook> => {
+  create: async (data: Partial<Webhook>) => {
     const response = await api.post<Webhook>('/webhooks', data);
-    return response.data;
+    return response.data as Webhook;
   },
 
-  update: async (id: string, data: Partial<Webhook>): Promise<Webhook> => {
+  update: async (id: string, data: Partial<Webhook>) => {
     const response = await api.put<Webhook>(`/webhooks/${id}`, data);
-    return response.data;
+    return response.data as Webhook;
   },
 
   delete: async (id: string) => {
     await api.delete(`/webhooks/${id}`);
   },
 
-  regenerateToken: async (id: string): Promise<Webhook> => {
-    const response = await api.post<Webhook>(`/webhooks/${id}/regenerate-token`);
-    return response.data;
+  regenerateToken: async (id: string) => {
+    const response = await api.post(`/webhooks/${id}/regenerate-token`);
+    return response.data as Webhook;
   },
 
-  getUrl: async (id: string): Promise<{ url: string; token: string }> => {
+  getUrl: async (id: string) => {
     const response = await api.get(`/webhooks/${id}/url`);
-    return response.data;
+    return response.data as { url: string; token: string };
   },
 };
 
@@ -189,33 +235,33 @@ export const scheduleApi = {
     return response.data;
   },
 
-  get: async (id: string): Promise<Schedule> => {
+  get: async (id: string) => {
     const response = await api.get(`/schedules/${id}`);
-    return response.data;
+    return response.data as Schedule;
   },
 
-  create: async (data: Partial<Schedule>): Promise<Schedule> => {
+  create: async (data: Partial<Schedule>) => {
     const response = await api.post<Schedule>('/schedules', data);
-    return response.data;
+    return response.data as Schedule;
   },
 
-  update: async (id: string, data: Partial<Schedule>): Promise<Schedule> => {
+  update: async (id: string, data: Partial<Schedule>) => {
     const response = await api.put<Schedule>(`/schedules/${id}`, data);
-    return response.data;
+    return response.data as Schedule;
   },
 
   delete: async (id: string) => {
     await api.delete(`/schedules/${id}`);
   },
 
-  trigger: async (id: string): Promise<WorkflowRun> => {
-    const response = await api.post<WorkflowRun>(`/schedules/${id}/trigger`);
-    return response.data;
+  trigger: async (id: string) => {
+    const response = await api.post(`/schedules/${id}/trigger`);
+    return response.data as WorkflowRun;
   },
 
-  toggle: async (id: string): Promise<Schedule> => {
-    const response = await api.post<Schedule>(`/schedules/${id}/toggle`);
-    return response.data;
+  toggle: async (id: string) => {
+    const response = await api.post(`/schedules/${id}/toggle`);
+    return response.data as Schedule;
   },
 };
 

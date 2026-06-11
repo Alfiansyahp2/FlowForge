@@ -19,7 +19,7 @@ export interface Workflow {
   current_version_id: string | null;
   name: string;
   description: string | null;
-  definition: WorkflowDefinition;
+  definition: WorkflowDefinitionInput;  // Can be JSON string or object
   status: 'draft' | 'active' | 'archived';
   created_at: string;
   updated_at: string;
@@ -29,6 +29,10 @@ export interface WorkflowDefinition {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }
+
+// Backend stores definition as JSON string in DB
+// Frontend can work with it as object, but API sends/receives as string
+export type WorkflowDefinitionInput = string | WorkflowDefinition;
 
 export interface WorkflowNode {
   id: string;
@@ -48,7 +52,7 @@ export interface WorkflowVersion {
   id: string;
   workflow_id: string;
   version: number;
-  definition: WorkflowDefinition;
+  definition: WorkflowDefinitionInput;  // Can be JSON string or object
   created_by: string;
   created_at: string;
 }
