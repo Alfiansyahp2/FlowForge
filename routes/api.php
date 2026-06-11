@@ -20,12 +20,18 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Public authentication routes
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+// Public authentication routes (Rate limited to 5 requests per minute)
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login', [AuthController::class, 'login']);
+});
 
-// Protected authentication routes
-Route::middleware(['auth:sanctum', \App\Http\Middleware\IdentifyTenant::class])->group(function () {
+// Protected routes (JWT authenticated & Rate limited to 60 requests per minute)
+Route::middleware([
+    \App\Http\Middleware\JwtAuthMiddleware::class,
+    \App\Http\Middleware\IdentifyTenant::class,
+    'throttle:60,1'
+])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 

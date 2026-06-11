@@ -14,6 +14,10 @@ use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private \App\Services\JWTService $jwtService
+    ) {}
+
     /**
      * Register a new user
      */
@@ -66,7 +70,7 @@ class AuthController extends Controller
         $user->assignRole('viewer');
 
         // Create API token
-        $token = $user->createToken('auth-token')->plainTextToken;
+        $token = $this->jwtService->generateToken($user);
 
         return response([
             'message' => 'User registered successfully',
@@ -134,7 +138,7 @@ class AuthController extends Controller
         $user->tokens()->delete();
 
         // Create new API token
-        $token = $user->createToken('auth-token')->plainTextToken;
+        $token = $this->jwtService->generateToken($user);
 
         return response([
             'message' => 'Login successful',
@@ -155,8 +159,11 @@ class AuthController extends Controller
      */
     public function logout(Request $request): Response
     {
-        // Revoke current token
-        $request->user()->currentAccessToken()->delete();
+        // For stateless JWT, client discards the token.
+        // We gracefully clean up Sanctum tokens if they exist.
+        if ($request->user() && method_exists($request->user(), 'currentAccessToken') && $request->user()->currentAccessToken()) {
+            $request->user()->currentAccessToken()->delete();
+        }
 
         return response([
             'message' => 'Logged out successfully'
