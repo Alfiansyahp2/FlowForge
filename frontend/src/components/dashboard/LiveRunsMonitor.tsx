@@ -1,162 +1,74 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { runsApi } from '../../services/api';
-import { cache, CacheKeys } from '../../lib/cache';
-import { useWebSocket } from '../../lib/websocket';
 import type { WorkflowRun } from '../../types';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { Play, AlertCircle, CheckCircle, Loader, XCircle, RefreshCw } from 'lucide-react';
+import { Play, AlertCircle, CheckCircle, Loader, XCircle, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 
 interface LiveRunsMonitorProps {
-  tenantId: string;
+  tenantId?: string;
   onError?: (error: string) => void;
 }
 
 export function LiveRunsMonitor({ tenantId, onError }: LiveRunsMonitorProps) {
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Use WebSocket hook for real-time updates
-  const { status: connectionStatus, subscribe } = useWebSocket(tenantId);
-
-  // Load initial active runs from cache or API
-  useEffect(() => {
-    loadActiveRuns();
-  }, []);
-
-  // Subscribe to real-time events
-  useEffect(() => {
-    if (!tenantId || connectionStatus !== 'connected') return;
-
-    const unsubscribers = [
-      // Listen for workflow started events
-      subscribe(
-        `tenant.${tenantId}`,
-        'workflow.started',
-        (data: WorkflowRun) => {
-          setRuns((prev) => {
-            const exists = prev.some((r) => r.id === data.id);
-            if (exists) return prev;
-            return [data, ...prev].slice(0, 10);
-          });
-        }
-      ),
-
-      // Listen for workflow completed events
-      subscribe(
-        `tenant.${tenantId}`,
-        'workflow.completed',
-        (data: WorkflowRun) => {
-          setRuns((prev) => prev.filter((r) => r.id !== data.id));
-        }
-      ),
-
-      // Listen for workflow failed events
-      subscribe(
-        `tenant.${tenantId}`,
-        'workflow.failed',
-        (data: WorkflowRun) => {
-          setRuns((prev) => prev.filter((r) => r.id !== data.id));
-        }
-      ),
-
-      // Listen for step started events
-      subscribe(
-        `tenant.${tenantId}`,
-        'step.started',
-        (data: any) => {
-          setRuns((prev) =>
-            prev.map((run) => {
-              if (run.id === data.workflow_run_id) {
-                return {
-                  ...run,
-                  step_runs: run.step_runs?.map((step) =>
-                    step.id === data.id ? { ...step, ...data } : step
-                  ) || [],
-                };
-              }
-              return run;
-            })
-          );
-        }
-      ),
-
-      // Listen for step completed events
-      subscribe(
-        `tenant.${tenantId}`,
-        'step.completed',
-        (data: any) => {
-          setRuns((prev) =>
-            prev.map((run) => {
-              if (run.id === data.workflow_run_id) {
-                return {
-                  ...run,
-                  step_runs: run.step_runs?.map((step) =>
-                    step.id === data.id ? { ...step, ...data } : step
-                  ) || [],
-                };
-              }
-              return run;
-            })
-          );
-        }
-      ),
-
-      // Listen for step failed events
-      subscribe(
-        `tenant.${tenantId}`,
-        'step.failed',
-        (data: any) => {
-          setRuns((prev) =>
-            prev.map((run) => {
-              if (run.id === data.workflow_run_id) {
-                return {
-                  ...run,
-                  step_runs: run.step_runs?.map((step) =>
-                    step.id === data.id ? { ...step, ...data } : step
-                  ) || [],
-                };
-              }
-              return run;
-            })
-          );
-        }
-      ),
-    ];
-
-    // Cleanup on unmount
-    return () => {
-      unsubscribers.forEach((unsub) => unsub());
-    };
-  }, [tenantId, connectionStatus, subscribe]);
-
-  const loadActiveRuns = async () => {
+  // Load active runs
+  const loadActiveRuns = useCallback(async (showRefreshingState = false) => {
     try {
-      setIsLoading(true);
-
-      // Try to get from cache first
-      const cached = cache.get<WorkflowRun[]>(CacheKeys.activeRuns());
-      if (cached) {
-        setRuns(cached);
-        setIsLoading(false);
-        return;
+      if (showRefreshingState) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
       }
+      setError(null);
 
-      // Fetch from API if not cached
       const response = await runsApi.list({ status: 'running', per_page: 10 });
       const runsData = response.data || [];
 
       setRuns(runsData);
-
-      // Cache for 30 seconds
-      cache.set(CacheKeys.activeRuns(), runsData, 30000);
-    } catch (error) {
-      console.error('Failed to load active runs:', error);
-      onError?.('Failed to load active runs');
+    } catch (err: any) {
+      console.error('Failed to load active runs:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to load active runs';
+      setError(errorMessage);
+      onError?.(errorMessage);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [onError]);
+
+  // Initial load
+  useEffect(() => {
+    loadActiveRuns();
+  }, [loadActiveRuns]);
+
+  // Auto-refresh every 5 seconds when there are active runs
+  useEffect(() => {
+    // Clear existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // Only auto-refresh if there are active runs
+    if (runs.length > 0) {
+      intervalRef.current = setInterval(() => {
+        loadActiveRuns(true);
+      }, 5000); // Refresh every 5 seconds
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [runs.length, loadActiveRuns]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -181,6 +93,23 @@ export function LiveRunsMonitor({ tenantId, onError }: LiveRunsMonitorProps) {
     return styles[status] || styles.pending;
   };
 
+  const formatDuration = (ms: number | null) => {
+    if (!ms) return '-';
+    if (ms < 1000) return `${ms}ms`;
+    const seconds = (ms / 1000).toFixed(1);
+    return `${seconds}s`;
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleString('id-ID', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -188,31 +117,25 @@ export function LiveRunsMonitor({ tenantId, onError }: LiveRunsMonitorProps) {
           <CardTitle className="text-lg flex items-center gap-2">
             <Play className="w-5 h-5" />
             Active Workflow Runs
+            {runs.length > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full border border-blue-200">
+                {runs.length} Active
+              </span>
+            )}
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               variant="outline"
-              onClick={() => {
-                cache.delete(CacheKeys.activeRuns());
-                loadActiveRuns();
-              }}
-              disabled={isLoading}
+              onClick={() => loadActiveRuns(true)}
+              disabled={isRefreshing}
             >
-              <RefreshCw className={`w-4 h-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  connectionStatus === 'connected'
-                    ? 'bg-green-500 animate-pulse'
-                    : connectionStatus === 'connecting'
-                    ? 'bg-yellow-500 animate-pulse'
-                    : 'bg-red-500'
-                }`}
-              />
-              <span className="text-xs text-gray-500 capitalize">{connectionStatus}</span>
+            <div className="flex items-center gap-2 px-2 py-1 bg-green-50 rounded-md border border-green-200">
+              <Wifi className="w-3 h-3 text-green-600" />
+              <span className="text-xs text-green-700">Polling Active</span>
             </div>
           </div>
         </div>
@@ -223,10 +146,23 @@ export function LiveRunsMonitor({ tenantId, onError }: LiveRunsMonitorProps) {
             <Loader className="w-6 h-6 animate-spin mr-2" />
             Loading active runs...
           </div>
+        ) : error ? (
+          <div className="text-center py-8">
+            <AlertCircle className="w-12 h-12 mx-auto mb-3 text-red-400" />
+            <p className="text-sm text-red-600 mb-2">{error}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => loadActiveRuns()}
+            >
+              Try Again
+            </Button>
+          </div>
         ) : runs.length === 0 ? (
           <div className="text-center py-8 text-gray-400">
             <Play className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p className="text-sm">No active workflow runs</p>
+            <p className="text-xs mt-1 text-gray-300">Active workflows will appear here</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -250,11 +186,16 @@ export function LiveRunsMonitor({ tenantId, onError }: LiveRunsMonitorProps) {
                       </span>
                     </div>
                     <div className="text-xs text-gray-500">
-                      <span>Started: {new Date(run.started_at).toLocaleString()}</span>
+                      <span>Started: {formatDate(run.started_at || run.created_at)}</span>
                       {run.duration && run.duration > 0 && (
-                        <span className="ml-3">Duration: {run.duration}ms</span>
+                        <span className="ml-3">Duration: {formatDuration(run.duration)}</span>
                       )}
                     </div>
+                    {run.trigger_type && (
+                      <div className="text-xs text-gray-400 mt-1">
+                        Trigger: {run.trigger_type.charAt(0).toUpperCase() + run.trigger_type.slice(1)}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">{getStatusIcon(run.status)}</div>
                 </div>
@@ -273,7 +214,7 @@ export function LiveRunsMonitor({ tenantId, onError }: LiveRunsMonitorProps) {
                           <span className="text-gray-500 ml-2">Node: {step.node_id}</span>
                         </div>
                         {step.duration && step.duration > 0 && (
-                          <span className="text-gray-500">{step.duration}ms</span>
+                          <span className="text-gray-500">{formatDuration(step.duration)}</span>
                         )}
                       </div>
                     ))}
@@ -286,6 +227,9 @@ export function LiveRunsMonitor({ tenantId, onError }: LiveRunsMonitorProps) {
                 )}
               </div>
             ))}
+            <div className="text-xs text-gray-400 text-center pt-2">
+              Auto-refreshing every 5 seconds...
+            </div>
           </div>
         )}
       </CardContent>
