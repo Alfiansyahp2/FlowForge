@@ -217,6 +217,31 @@ CREATE INDEX idx_workflow_runs_tenant_status ON workflow_runs(tenant_id, status)
 CREATE INDEX idx_workflow_runs_dashboard ON workflow_runs(tenant_id, status, started_at);
 ```
 
+### Query Optimization & EXPLAIN Plan Analysis
+
+To demonstrate non-trivial query optimization, we analyzed the performance of querying active/running workflows filtered by tenant context (the most common high-frequency query on the real-time monitoring dashboard):
+
+```sql
+EXPLAIN ANALYZE 
+SELECT * FROM workflow_runs 
+WHERE tenant_id = '019eb382-6b38-7018-9acc-50484630fa07' 
+  AND status = 'running';
+```
+
+**PostgreSQL EXPLAIN Output:**
+```text
+Index Scan using workflow_runs_tenant_id_status_started_at_index on workflow_runs  (cost=0.14..8.16 rows=1 width=2308) (actual time=0.015..0.015 rows=0 loops=1)
+  Index Cond: ((tenant_id = '019eb382-6b38-7018-9acc-50484630fa07'::uuid) AND ((status)::text = 'running'::text))
+Planning Time: 7.160 ms
+Execution Time: 0.443 ms
+```
+
+**Optimization Reasoning:**
+1. **Index Scan Utilization**: Instead of executing a costly table scan (`Seq Scan`) which scans every row sequentially, the planner uses the composite index `workflow_runs_tenant_id_status_started_at_index`.
+2. **Compound Filter Efficiency**: The database performs an `Index Cond` filter on both `tenant_id` and `status` simultaneously, immediately narrowing the search space to a single tenant's running records.
+3. **Execution Speed**: The query planning takes `7.160 ms`, and the actual search execution takes only `0.443 ms`. As the database scales to millions of workflow runs across thousands of tenants, this keeps database query performance at O(log N) complexity instead of O(N).
+
+
 ## 🔄 Event Broadcasting Architecture
 
 ### Real-Time Updates via Laravel Reverb
