@@ -396,10 +396,13 @@ export default function WorkflowEditorPage() {
             })),
           };
 
+          // Backend expects definition as JSON string, not object
+          const definitionString = JSON.stringify(definition);
+
           if (isNew) {
             const created = await workflowApi.create({
               name, description,
-              definition,
+              definition: definitionString,  // Send as STRING
               status: 'draft',
             });
             if (!created?.id) {
@@ -408,7 +411,11 @@ export default function WorkflowEditorPage() {
             success(`Workflow "${name}" created.`);
             navigate(`/workflows/${created.id}`);
           } else {
-            await workflowApi.update(id!, { name, description, definition });
+            await workflowApi.update(id!, {
+              name,
+              description,
+              definition: definitionString  // Send as STRING
+            });
             success(`Workflow "${name}" saved.`);
             loadWorkflow(id!);
           }
