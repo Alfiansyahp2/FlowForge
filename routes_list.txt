@@ -1,0 +1,42 @@
+
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37m/[39m[38;5;103m ....................................................................................... routes/web.php:5[39m
+  [33mPOST[39m      [37mapi/login[39m[38;5;103m ....................................................................... Api\AuthController@login[39m
+  [33mPOST[39m      [37mapi/logout[39m[38;5;103m ..................................................................... Api\AuthController@logout[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/me[39m[38;5;103m ............................................................................. Api\AuthController@me[39m
+  [33mPOST[39m      [37mapi/register[39m[38;5;103m ................................................................. Api\AuthController@register[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/schedules[39m[38;5;103m ............................................................... Api\ScheduleController@index[39m
+  [33mPOST[39m      [37mapi/schedules[39m[38;5;103m ............................................................... Api\ScheduleController@store[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/schedules/[39m[33m{schedule}[39m[38;5;103m ..................................................... Api\ScheduleController@show[39m
+  [33mPUT[39m       [37mapi/schedules/[39m[33m{schedule}[39m[38;5;103m ................................................... Api\ScheduleController@update[39m
+  [31mDELETE[39m    [37mapi/schedules/[39m[33m{schedule}[39m[38;5;103m .................................................. Api\ScheduleController@destroy[39m
+  [33mPOST[39m      [37mapi/schedules/[39m[33m{schedule}[39m[37m/toggle[39m[38;5;103m ............................................ Api\ScheduleController@toggle[39m
+  [33mPOST[39m      [37mapi/schedules/[39m[33m{schedule}[39m[37m/trigger[39m[38;5;103m .......................................... Api\ScheduleController@trigger[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/webhooks[39m[38;5;103m ................................................................. Api\WebhookController@index[39m
+  [33mPOST[39m      [37mapi/webhooks[39m[38;5;103m ................................................................. Api\WebhookController@store[39m
+  [33mPOST[39m      [37mapi/webhooks/[39m[33m{token}[39m[38;5;103m ................................................. Api\WebhookController@handleWebhook[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/webhooks/[39m[33m{webhook}[39m[38;5;103m ........................................................ Api\WebhookController@show[39m
+  [33mPUT[39m       [37mapi/webhooks/[39m[33m{webhook}[39m[38;5;103m ...................................................... Api\WebhookController@update[39m
+  [31mDELETE[39m    [37mapi/webhooks/[39m[33m{webhook}[39m[38;5;103m ..................................................... Api\WebhookController@destroy[39m
+  [33mPOST[39m      [37mapi/webhooks/[39m[33m{webhook}[39m[37m/regenerate-token[39m[38;5;103m ............................ Api\WebhookController@regenerateToken[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/webhooks/[39m[33m{webhook}[39m[37m/url[39m[38;5;103m .................................................. Api\WebhookController@getUrl[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/workflows[39m[38;5;103m ............................................................... Api\WorkflowController@index[39m
+  [33mPOST[39m      [37mapi/workflows[39m[38;5;103m ............................................................... Api\WorkflowController@store[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/workflows/[39m[33m{workflow}[39m[38;5;103m ..................................................... Api\WorkflowController@show[39m
+  [33mPUT[39m       [37mapi/workflows/[39m[33m{workflow}[39m[38;5;103m ................................................... Api\WorkflowController@update[39m
+  [31mDELETE[39m    [37mapi/workflows/[39m[33m{workflow}[39m[38;5;103m .................................................. Api\WorkflowController@destroy[39m
+  [33mPOST[39m      [37mapi/workflows/[39m[33m{workflow}[39m[37m/activate[39m[38;5;103m ........................................ Api\WorkflowController@activate[39m
+  [33mPOST[39m      [37mapi/workflows/[39m[33m{workflow}[39m[37m/archive[39m[38;5;103m .......................................... Api\WorkflowController@archive[39m
+  [33mPOST[39m      [37mapi/workflows/[39m[33m{workflow}[39m[37m/duplicate[39m[38;5;103m ...................................... Api\WorkflowController@duplicate[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/workflows/[39m[33m{workflow}[39m[37m/versions[39m[38;5;103m .................................... Api\WorkflowVersionController@index[39m
+  [33mPOST[39m      [37mapi/workflows/[39m[33m{workflow}[39m[37m/versions[39m[38;5;103m .................................... Api\WorkflowVersionController@store[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/workflows/[39m[33m{workflow}[39m[37m/versions/compare[39m[38;5;103m .......................... Api\WorkflowVersionController@compare[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mapi/workflows/[39m[33m{workflow}[39m[37m/versions/[39m[33m{version}[39m[38;5;103m ........................... Api\WorkflowVersionController@show[39m
+  [33mPOST[39m      [37mapi/workflows/[39m[33m{workflow}[39m[37m/versions/[39m[33m{version}[39m[37m/activate[39m[38;5;103m .............. Api\WorkflowVersionController@activate[39m
+  [33mPOST[39m      [37mapi/workflows/[39m[33m{workflow}[39m[37m/versions/[39m[33m{version}[39m[37m/rollback[39m[38;5;103m .............. Api\WorkflowVersionController@rollback[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37msanctum/csrf-cookie[39m[38;5;103m .................... sanctum.csrf-cookie › Laravel\Sanctum › CsrfCookieController@show[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mstorage/[39m[33m{path}[39m[38;5;103m storage.local › vendor/laravel/framework/src/Illuminate/Filesystem/FilesystemServiceProvid…[39m
+  [33mPUT[39m       [37mstorage/[39m[33m{path}[39m[38;5;103m storage.local.upload › vendor/laravel/framework/src/Illuminate/Filesystem/FilesystemServic…[39m
+  [34mGET[39m[38;5;103m|[39m[38;5;103mHEAD[39m  [37mup[39m[38;5;103m ........... vendor/laravel/framework/src/Illuminate/Foundation/Configuration/ApplicationBuilder.php:219[39m
+
+                                                                                                   [34;1mShowing [38] routes[39;22m
+
