@@ -8,7 +8,7 @@ import type { Workflow } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { PageLayout } from '../components/layout/PageLayout';
-import { HealthPanel, LiveRunsMonitor } from '../components/dashboard';
+import { HealthPanel, LiveRunsMonitor, RunHistoryList } from '../components/dashboard';
 import {
   Play, Plus, Trash2, Power, PowerOff, Eye,
   LayoutDashboard, Webhook, Clock, Users, LogOut, ChevronRight, BarChart3,
@@ -342,18 +342,13 @@ export default function DashboardPage() {
 
       {activeSection === 'runs' && (
         <div className="space-y-6">
-          {/* Runs page will be rendered as a separate route */}
-          <Card>
-            <CardContent className="flex items-center justify-center h-64">
-              <div className="text-center">
-                <Clock className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-600 mb-2">View detailed run history</p>
-                <Button onClick={() => navigate('/runs')}>
-                  Go to Runs Page
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Run History List */}
+          <RunHistoryList
+            tenantId={user?.tenant_id}
+            onError={(error) => {
+              console.error('Run history error:', error);
+            }}
+          />
         </div>
       )}
 
