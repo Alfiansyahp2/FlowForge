@@ -134,14 +134,25 @@ export const workflowApi = {
 
 // Workflow Runs API
 export const runsApi = {
-  list: async (params?: { workflow_id?: string; page?: number }) => {
+  list: async (params?: {
+    status?: string;
+    workflow_id?: string;
+    date_from?: string;
+    date_to?: string;
+    page?: number;
+    per_page?: number;
+  }) => {
     const response = await api.get('/runs', { params });
     return response.data?.data ?? response.data;
   },
 
-  get: async (id: string): Promise<WorkflowRun> => {
-    const response = await api.get(`/runs/${id}`);
-    return response.data?.data ?? response.data;
+  get: async (id: string): Promise<{ data: WorkflowRun }> => {
+    const response = await api.get<{ data: WorkflowRun }>(`/runs/${id}`);
+    return response.data;
+  },
+
+  cancel: async (id: string) => {
+    await api.post(`/runs/${id}/cancel`);
   },
 };
 

@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import WorkflowEditorPage from './pages/WorkflowEditorPage';
+import WorkflowRunsPage from './pages/WorkflowRunsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -57,6 +58,8 @@ export default function App() {
         <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
         <Route path="/dashboard"      element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/workflows/:id"  element={<ProtectedRoute><WorkflowEditorPage /></ProtectedRoute>} />
+        <Route path="/runs"           element={<ProtectedRoute><WorkflowRunsPage /></ProtectedRoute>} />
+        <Route path="/runs/:id"       element={<ProtectedRoute><WorkflowRunsPage /></ProtectedRoute>} />
         <Route path="/"  element={<Navigate to="/dashboard" replace />} />
         <Route path="*"  element={<Navigate to="/dashboard" replace />} />
       </Routes>
