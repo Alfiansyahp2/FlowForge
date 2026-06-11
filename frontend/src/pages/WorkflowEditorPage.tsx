@@ -53,6 +53,7 @@ function RunStatusBadge({ status }: { status: string }) {
     failed:    'bg-red-100 text-red-700 border-red-200',
     pending:   'bg-yellow-100 text-yellow-700 border-yellow-200',
     timeout:   'bg-orange-100 text-orange-700 border-orange-200',
+    skipped:   'bg-gray-100 text-gray-600 border-gray-200',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${styles[status] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>

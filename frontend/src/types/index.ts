@@ -97,7 +97,7 @@ export interface StepRun {
   workflow_run_id: string;
   node_id: string;
   node_type: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'skipped';
   input: Record<string, unknown> | null;
   output: Record<string, unknown> | null;
   error_message: string | null;

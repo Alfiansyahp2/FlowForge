@@ -29,6 +29,19 @@ const STATUS_BADGE: Record<string, string> = {
   archived: 'bg-gray-100 text-gray-500 border border-gray-200',
 };
 
+// Helper to parse workflow definition (handle both string and object)
+const parseDefinition = (definition: string | { nodes: any[] } | null | undefined) => {
+  if (!definition) return { nodes: [] };
+  if (typeof definition === 'string') {
+    try {
+      return JSON.parse(definition);
+    } catch {
+      return { nodes: [] };
+    }
+  }
+  return definition;
+};
+
 export default function DashboardPage() {
   const navigate   = useNavigate();
   const { user, logout } = useAuthStore();
@@ -444,7 +457,7 @@ export default function DashboardPage() {
                         {workflow.status.charAt(0).toUpperCase() + workflow.status.slice(1)}
                       </span>
                       <span className="text-gray-400">
-                        {workflow.definition?.nodes?.length ?? 0} nodes
+                        {parseDefinition(workflow.definition).nodes?.length ?? 0} nodes
                       </span>
                     </div>
 
