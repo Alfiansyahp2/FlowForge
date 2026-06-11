@@ -93,7 +93,7 @@ class WorkflowRunController extends Controller
         return [
             'id'                  => $run->id,
             'workflow_id'         => $run->workflow_id,
-            'workflow_name'       => $run->workflow?->name,
+            'workflow'            => $run->workflow ? ['id' => $run->workflow->id, 'name' => $run->workflow->name] : null,
             'workflow_version_id' => $run->workflow_version_id,
             'status'              => $run->status,
             'trigger_type'        => $run->trigger_type,

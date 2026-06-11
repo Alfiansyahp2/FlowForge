@@ -62,8 +62,8 @@ export interface WorkflowRun {
   tenant_id: string;
   workflow_id: string;
   workflow_version_id: string;
-  status: 'running' | 'completed' | 'failed';
-  trigger_type: 'manual' | 'webhook' | 'cron';
+  status: 'running' | 'completed' | 'failed' | 'pending' | 'timeout';
+  trigger_type: 'manual' | 'webhook' | 'schedule' | 'api';
   triggered_by: string | null;
   input: Record<string, unknown>;
   output: Record<string, unknown> | null;
@@ -71,6 +71,7 @@ export interface WorkflowRun {
   started_at: string;
   finished_at: string | null;
   duration: number | null;
+  created_at: string;
   step_runs?: StepRun[];
   workflow?: {
     id: string;
