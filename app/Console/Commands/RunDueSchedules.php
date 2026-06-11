@@ -7,6 +7,7 @@ use App\WorkflowEngine\WorkflowExecutor;
 use App\WorkflowEngine\WorkflowValidator;
 use App\WorkflowEngine\TopologicalSorter;
 use App\WorkflowEngine\RetryManager;
+use App\WorkflowEngine\SafeExpressionEvaluator;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -31,10 +32,11 @@ class RunDueSchedules extends Command
     public function __construct(
         WorkflowValidator $validator,
         TopologicalSorter $sorter,
-        RetryManager $retryManager
+        RetryManager $retryManager,
+        SafeExpressionEvaluator $expressionEvaluator
     ) {
         parent::__construct();
-        $this->executor = new WorkflowExecutor($validator, $sorter, $retryManager);
+        $this->executor = new WorkflowExecutor($validator, $sorter, $retryManager, $expressionEvaluator);
     }
 
     /**

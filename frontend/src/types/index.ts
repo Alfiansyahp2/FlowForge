@@ -59,16 +59,29 @@ export interface WorkflowVersion {
 
 export interface WorkflowRun {
   id: string;
+  tenant_id: string;
   workflow_id: string;
   workflow_version_id: string;
   status: 'running' | 'completed' | 'failed';
   trigger_type: 'manual' | 'webhook' | 'cron';
+  triggered_by: string | null;
   input: Record<string, unknown>;
   output: Record<string, unknown> | null;
+  error_message: string | null;
   started_at: string;
   finished_at: string | null;
   duration: number | null;
   step_runs?: StepRun[];
+  workflow?: {
+    id: string;
+    name: string;
+    definition?: WorkflowDefinition;
+  };
+  workflow_version?: {
+    id: string;
+    version: number;
+    definition: WorkflowDefinition;
+  };
 }
 
 export interface WorkflowStartResponse {

@@ -8,9 +8,10 @@ import type { Workflow } from '../types';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
 import { PageLayout } from '../components/layout/PageLayout';
+import { HealthPanel, LiveRunsMonitor } from '../components/dashboard';
 import {
   Play, Plus, Trash2, Power, PowerOff, Eye,
-  LayoutDashboard, Webhook, Clock, Users, LogOut, ChevronRight,
+  LayoutDashboard, Webhook, Clock, Users, LogOut, ChevronRight, BarChart3,
 } from 'lucide-react';
 import UserManagementPage from './UserManagementPage';
 import WebhooksPage from './WebhooksPage';
@@ -37,7 +38,7 @@ export default function DashboardPage() {
   const [workflows, setWorkflows]     = useState<Workflow[]>([]);
   const [isLoading, setIsLoading]     = useState(true);
   const [activeSection, setActiveSection] =
-    useState<'workflows' | 'webhooks' | 'schedules' | 'users'>('workflows');
+    useState<'overview' | 'workflows' | 'runs' | 'webhooks' | 'schedules' | 'users'>('overview');
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => { loadWorkflows(); }, []);
@@ -148,10 +149,12 @@ export default function DashboardPage() {
   const roleBadge = ROLE_BADGE[role] ?? ROLE_BADGE['viewer'];
 
   const navItems = [
-    { key: 'workflows', label: 'Workflows',        icon: LayoutDashboard, show: can('view workflows') },
-    { key: 'webhooks',  label: 'Webhooks',          icon: Webhook,         show: can('view webhooks')  },
-    { key: 'schedules', label: 'Schedules',         icon: Clock,           show: can('view schedules') },
-    { key: 'users',     label: 'User Management',   icon: Users,           show: isAdmin },
+    { key: 'overview',   label: 'Overview',         icon: BarChart3,        show: true },
+    { key: 'workflows',  label: 'Workflows',        icon: LayoutDashboard, show: can('view workflows') },
+    { key: 'runs',       label: 'Run History',      icon: Clock,           show: can('view workflows') },
+    { key: 'webhooks',   label: 'Webhooks',         icon: Webhook,         show: can('view webhooks')  },
+    { key: 'schedules',  label: 'Schedules',        icon: Clock,           show: can('view schedules') },
+    { key: 'users',      label: 'User Management',  icon: Users,           show: isAdmin },
   ].filter((item) => item.show);
 
   const sidebarContent = (
@@ -257,11 +260,17 @@ export default function DashboardPage() {
   const headerContent = (
     <div className="flex items-center justify-between">
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 capitalize">
-          {activeSection === 'users' ? 'User Management' : activeSection}
+        <h2 className="text-xl font-semibold text-gray-900">
+          {activeSection === 'overview' && 'Dashboard Overview'}
+          {activeSection === 'workflows' && 'Workflows'}
+          {activeSection === 'runs' && 'Run History'}
+          {activeSection === 'users' && 'User Management'}
+          {!['overview', 'workflows', 'runs', 'users'].includes(activeSection) && activeSection.charAt(0).toUpperCase() + activeSection.slice(1)}
         </h2>
         <p className="text-sm text-gray-400 mt-0.5">
+          {activeSection === 'overview' && 'Real-time monitoring and health metrics'}
           {activeSection === 'workflows' && 'Manage and monitor your workflows'}
+          {activeSection === 'runs' && 'View workflow execution history'}
           {activeSection === 'webhooks'  && 'Manage webhook triggers'}
           {activeSection === 'schedules' && 'Manage cron schedules'}
           {activeSection === 'users'     && 'Manage users and roles'}
@@ -278,6 +287,76 @@ export default function DashboardPage() {
 
   const mainContent = (
     <div className="flex-1 p-6">
+      {activeSection === 'overview' && (
+        <div className="space-y-6">
+          {/* Health Metrics Panel */}
+          <HealthPanel />
+
+          {/* Live Runs Monitor */}
+          {user?.tenant_id && (
+            <LiveRunsMonitor
+              tenantId={user.tenant_id}
+              onError={(error) => console.error('WebSocket error:', error)}
+            />
+          )}
+
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                {can('create workflows') && (
+                  <Button
+                    className="w-full"
+                    onClick={handleNewWorkflow}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Workflow
+                  </Button>
+                )}
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => setActiveSection('runs')}
+                >
+                  <Clock className="w-4 h-4 mr-2" />
+                  View Run History
+                </Button>
+                {can('view webhooks') && (
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => setActiveSection('webhooks')}
+                  >
+                    <Webhook className="w-4 h-4 mr-2" />
+                    Manage Webhooks
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {activeSection === 'runs' && (
+        <div className="space-y-6">
+          {/* Runs page will be rendered as a separate route */}
+          <Card>
+            <CardContent className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <Clock className="w-12 h-12 mx-auto mb-3 text-gray-400" />
+                <p className="text-gray-600 mb-2">View detailed run history</p>
+                <Button onClick={() => navigate('/runs')}>
+                  Go to Runs Page
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {activeSection === 'workflows' && (
         <>
           {isLoading ? (

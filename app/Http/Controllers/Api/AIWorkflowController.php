@@ -29,13 +29,13 @@ class AIWorkflowController extends Controller
         ]);
 
         $prompt = $request->input('prompt');
-        $apiKey = env('OPENAI_API_KEY');
+        $apiKey = env('AI_API_KEY', env('OPENAI_API_KEY'));
 
         try {
             if ($apiKey) {
-                $definition = $this->generateWithOpenAI($prompt, $apiKey);
+                $definition = $this->generateWithLLM($prompt, $apiKey);
             } else {
-                Log::info('OPENAI_API_KEY not set. Using local semantic parser fallback.');
+                Log::info('AI_API_KEY / OPENAI_API_KEY not set. Using local semantic parser fallback.');
                 $definition = $this->generateWithLocalFallback($prompt);
             }
 
@@ -78,9 +78,9 @@ class AIWorkflowController extends Controller
     }
 
     /**
-     * Call OpenAI API to generate DAG.
+     * Call LLM API (OpenAI-compatible) to generate DAG.
      */
-    private function generateWithOpenAI(string $userPrompt, string $apiKey): array
+    private function generateWithLLM(string $userPrompt, string $apiKey): array
     {
         $systemPrompt = <<<PROMPT
 You are a Staff Workflow Systems Architect. Your job is to translate a user's natural language request into a valid Workflow DAG (Directed Acyclic Graph) JSON structure.
@@ -113,10 +113,13 @@ Output format:
 Make sure there are NO cycles (no loops) in the edges.
 PROMPT;
 
+        $baseUrl = env('AI_BASE_URL', 'https://api.openai.com/v1');
+        $model = env('AI_MODEL', 'gpt-3.5-turbo');
+
         $response = Http::withToken($apiKey)
             ->timeout(30)
-            ->post('https://api.openai.com/v1/chat/completions', [
-                'model' => 'gpt-3.5-turbo',
+            ->post(rtrim($baseUrl, '/') . '/chat/completions', [
+                'model' => $model,
                 'messages' => [
                     ['role' => 'system', 'content' => $systemPrompt],
                     ['role' => 'user', 'content' => $userPrompt],
@@ -126,7 +129,7 @@ PROMPT;
             ]);
 
         if ($response->failed()) {
-            throw new Exception("OpenAI API call failed: " . $response->body());
+            throw new Exception("LLM API call failed: " . $response->body());
         }
 
         $content = $response->json('choices.0.message.content');
